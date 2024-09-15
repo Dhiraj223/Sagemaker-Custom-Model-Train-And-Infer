@@ -65,11 +65,11 @@ def main():
     parser.add_argument('--num-gpus', type=int, default=os.environ.get('SM_NUM_GPUS', 0))
 
     # Hyperparameters
-    parser.add_argument('--epochs', type=int, default=10)
-    parser.add_argument('--batch-size', type=int, default=64)
-    parser.add_argument('--learning-rate', type=float, default=0.001)
-    parser.add_argument('--trainlimit', type=int, default=3000)
-    parser.add_argument('--testlimit', type=int, default=500)
+    parser.add_argument('--epochs', type=int, default=os.environ.get("epochs", 10))
+    parser.add_argument('--batch-size', type=int, default=os.environ.get("batch_size",64))
+    parser.add_argument('--learning-rate', type=float, default=os.environ.get("learning_rate",0.001))
+    parser.add_argument('--trainlimit', type=int, default=os.environ.get("trainlimit",3000))
+    parser.add_argument('--testlimit', type=int, default=os.environ.get("testlimit",500))
 
     args = parser.parse_args()
 
