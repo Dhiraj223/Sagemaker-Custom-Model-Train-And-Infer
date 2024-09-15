@@ -1,0 +1,102 @@
+#!/usr/bin/env python
+
+import multiprocessing
+import os
+import signal
+import subprocess
+import sys
+
+# Get CPU count and define environment variables for server configuration
+cpu_count = multiprocessing.cpu_count()
+model_server_timeout = os.environ.get('MODEL_SERVER_TIMEOUT', 60)
+model_server_workers = int(os.environ.get('MODEL_SERVER_WORKERS', cpu_count))
+
+# Define paths for working directory, Nginx configuration, and other required paths
+working_dir = "/opt/ml/code"  # Assuming this is your workdir in Docker
+nginx_conf = os.path.join(working_dir, "nginx.conf")
+gunicorn_socket = "/tmp/gunicorn.sock"
+nginx_access_log = "/var/log/nginx/access.log"
+nginx_error_log = "/var/log/nginx/error.log"
+
+def sigterm_handler(nginx_pid, gunicorn_pid):
+    """
+    Handle termination signals for Nginx and Gunicorn.
+    """
+    try:
+        print(f"Terminating Nginx with PID {nginx_pid}")
+        os.kill(nginx_pid, signal.SIGQUIT)
+    except OSError as e:
+        print(f"Error terminating Nginx: {e}")
+        
+    try:
+        print(f"Terminating Gunicorn with PID {gunicorn_pid}")
+        os.kill(gunicorn_pid, signal.SIGTERM)
+    except OSError as e:
+        print(f"Error terminating Gunicorn: {e}")
+
+    sys.exit(0)
+
+def start_server():
+    """
+    Start the inference server.
+    """
+    print(f"Starting the inference server with {model_server_workers} workers.")
+    print(f"Working directory: {working_dir}")
+
+    # Debugging: Verify the working directory exists and list files
+    if not os.path.exists(working_dir):
+        print(f"ERROR: Working directory {working_dir} does not exist!")
+    else:
+        print(f"Working directory contents: {os.listdir(working_dir)}")
+
+    # Link the log streams to stdout/stderr
+    try:
+        subprocess.check_call(['ln', '-sf', '/dev/stdout', nginx_access_log])
+        subprocess.check_call(['ln', '-sf', '/dev/stderr', nginx_error_log])
+        print(f"Log files linked: {nginx_access_log}, {nginx_error_log}")
+    except subprocess.CalledProcessError as e:
+        print(f"Error linking logs: {e}")
+
+    # Start Nginx with the configuration file
+    try:
+        print(f"Starting Nginx with configuration: {nginx_conf}")
+        nginx = subprocess.Popen(['nginx', '-c', nginx_conf])
+        print(f"Nginx started with PID {nginx.pid}")
+    except Exception as e:
+        print(f"Error starting Nginx: {e}")
+        sys.exit(1)
+
+    # Start Gunicorn with the specified workers and timeout
+    try:
+        print(f"Starting Gunicorn with {model_server_workers} workers, timeout: {model_server_timeout}")
+        gunicorn = subprocess.Popen([
+            'gunicorn',
+            '--timeout', str(model_server_timeout),
+            '-k', 'sync',
+            '-b', f'unix:{gunicorn_socket}',
+            '-w', str(model_server_workers),
+            '--chdir', working_dir, 
+            'wsgi:app'  # This refers to the WSGI app defined in your wsgi.py file
+        ])
+        print(f"Gunicorn started with PID {gunicorn.pid}")
+    except Exception as e:
+        print(f"Error starting Gunicorn: {e}")
+        sys.exit(1)
+
+    # Handle SIGTERM signal and shut down Nginx and Gunicorn gracefully
+    signal.signal(signal.SIGTERM, lambda a, b: sigterm_handler(nginx.pid, gunicorn.pid))
+
+    # Monitor processes and exit if either Gunicorn or Nginx exits
+    pids = set([nginx.pid, gunicorn.pid])
+    while True:
+        pid, _ = os.wait()
+        if pid in pids:
+            print(f"Process {pid} exited.")
+            break
+
+    # Clean up on exit
+    sigterm_handler(nginx.pid, gunicorn.pid)
+    print('Inference server exiting.')
+
+if __name__ == '__main__':
+    start_server()

@@ -1,0 +1,3 @@
+#!/bin/bash
+# Run the training script
+python /opt/ml/code/train.py
