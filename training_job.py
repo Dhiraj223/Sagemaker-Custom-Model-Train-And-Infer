@@ -17,16 +17,14 @@ estimator = Estimator(
     role=role,
     instance_count=1,
     instance_type='ml.m5.large',
-    hyperparameters={
-        'epochs': 25,
-        'batch-size': 64,
-        'learning-rate': 0.001,
-        'trainlimit' : 5000,
-        #'testlimit' : 500
-    },
     environment={
         "SM_CHANNEL_TRAIN": train_data,
-        "SM_CHANNEL_TEST": test_data
+        "SM_CHANNEL_TEST": test_data,
+        'epochs': 25,
+        'batch_size': 64,
+        'learning_rate': 0.001,
+        'trainlimit' : 5000,
+        # 'testlimit' : 800
     }
 )
 
